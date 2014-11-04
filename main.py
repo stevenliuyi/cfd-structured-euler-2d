@@ -79,10 +79,16 @@ def pressure(rho, u, v, et):
 def ic():
     # defined at cell-centers (including phatom cells)
     q = np.ones((lmax, mx+1, my+1))
-    q[0,:,:] = 1.
-    q[1,:,:] = 1.5
-    q[2,:,:] = 0.
-    q[3,:,:] = 2.
+    if (ibcin == 1):
+        q[0,:,:] = 1.
+        q[1,:,:] = .5
+        q[2,:,:] = 0.
+        q[3,:,:] = 1.
+    if (ibcin == 2):
+        q[0,:,:] = 1.
+        q[1,:,:] = 1.5
+        q[2,:,:] = 0.
+        q[3,:,:] = 2.
     return q
 
 # -----------------------------------------------------------------------------
@@ -342,7 +348,39 @@ def bc_symmetric():
 def bc_inflow():
     global q
     i = 0
-    ibcin = 2
+    
+    # subsonic inflow (ibcin = 1)
+    # specify following conditions:
+    # inlet flow angle = 0
+    # inlet stagnation pressure and temperature
+    # extrapolate: static pressure
+    if (ibcin == 1):
+        for j in range(1, my):
+            # extrapolate static pressure
+            rho  = q[0,i+1,j]
+            u    = q[1,i+1,j] / q[0,i+1,j]
+            v    = q[2,i+1,j] / q[0,i+1,j]
+            et   = q[3,i+1,j]
+            p1   = pressure(rho, u, v, et)
+            rho  = q[0,i+2,j]
+            u    = q[1,i+2,j] / q[0,i+2,j]
+            v    = q[2,i+2,j] / q[0,i+2,j]
+            et   = q[3,i+2,j]
+            p2   = pressure(rho, u, v, et)
+            p    = 2*p1 - p2
+
+            m2   = 2/(gamma-1) * (p**((1-gamma)/gamma) - 1)
+            t    = 1/(1 + .5*(gamma-1)*m2)
+            rho  = p / t
+            u    = np.sqrt(m2*gamma*t)
+            v    = 0.
+            et   = p/(gamma-1) + .5*rho*(u**2 + v**2)
+
+            q[0,i,j] = rho
+            q[1,i,j] = rho*u
+            q[2,i,j] = rho*v
+            q[3,i,j] = et
+
 
     # supersonic inflow (ibcin = 2)
     # specify following conditions:
@@ -371,9 +409,34 @@ def bc_inflow():
 def bc_outflow():
     global q
     i = mx
-    ibcout = 2
 
-    # supersonic inflow (ibcin = 2)
+    # subsonic outflow (ibcout = 1)
+    # specify following condition:
+    # static pressure pback
+    # extrapolate other variables
+    if (ibcout == 1):
+        pback = .8
+
+        for j in range(1,my):
+            p     = pback
+            # extraploate rho, u, v
+            rho1  = q[0,i-1,j]
+            u1    = q[1,i-1,j] / q[0,i-1,j]
+            v1    = q[2,i-1,j] / q[0,i-1,j]
+            rho2  = q[0,i-2,j]
+            u2    = q[1,i-2,j] / q[0,i-2,j]
+            v2    = q[2,i-2,j] / q[0,i-2,j]
+            rho   = 2*rho1 - rho2
+            u     = 2*u1 - u2
+            v     = 2*v1 - v2
+
+            et = p/(gamma-1) + .5*rho*(u**2 + v**2)
+            q[0,i,j] = rho
+            q[1,i,j] = rho*u
+            q[2,i,j] = rho*v
+            q[3,i,j] = et
+
+    # supersonic outflow (ibcout = 2)
     if (ibcout == 2):
         for j in range(1, my):
             q[:,i,j] = 2*q[:,i-1,j] - q[:,i-2,j]
@@ -437,7 +500,7 @@ def monitor():
             # solid boundary
             j = -1
             line3, = ax1.plot(xc[1:,j],mach[1:,j],'-o')
-            ax1.set_ylim(1,3)
+            ax1.set_ylim(0,2)
 
             con = ax2.contourf(xc[1:,1:],yc[1:,1:],mach[1:,1:], \
                     10,cmap=plt.cm.rainbow)
@@ -556,7 +619,7 @@ def write_data():
 # main program
 
 # grid points
-mx = 65; my = 17 
+# mx = 65; my = 17 
 mx = 129; my = 33
 
 # parameters
@@ -568,6 +631,10 @@ cfl  = 1.5
 visc = 3
 eps  = 1e-6
 tmax = 10000
+
+# boundary conditions
+ibcin  = 1
+ibcout = 1
 
 # read mesh file
 filename = 'ft03.128x32_trans.dat'
