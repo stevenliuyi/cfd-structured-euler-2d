@@ -475,21 +475,21 @@ def step():
 # -----------------------------------------------------------------------------
 # convergence moniter
 def monitor():
-    global stop, line1, line2, line3, cb
+    global reslist, stop, line1, line2, line3, line4, cb
     ijmax        = abs(res[0,:,:]).argmax()
     (imax, jmax) = np.unravel_index(ijmax, res[0,:,:].shape)
     resmax       = abs(res[0,imax,jmax])
+    resavg       = np.mean(abs(res[0,:,:]))
 
-    print t, resmax, imax, jmax
-    #if (t % 2 == 0):
-    #    if t==0:
-    #        #ax.contour(xi, yi, zi)
-    #        fig.show()
-    #    else:
-    #        #ax.contour(xi, yi, zi)
-    #        fig.canvas.draw()
-    #return
-    if (t % 2 == 0):
+    if (t % 10 == 0):
+        print ' step', '%10s' % 'avg.res', '%10s' % 'max.res', \
+                       '%11s' % 'x',       '%11s' % 'y'
+
+    print '%5d' % t, '%.4e' % resavg,        '%.4e' % resmax, \
+                     '%+.4e' % x[imax,jmax], '%+.4e' % y[imax,jmax]
+    reslist.append(resmax)
+
+    if (t % plot_interval == 0):
         if t==0:
             # mid-height
             j = int(mach.shape[-1]/2)
@@ -500,13 +500,21 @@ def monitor():
             # solid boundary
             j = -1
             line3, = ax1.plot(xc[1:,j],mach[1:,j],'-o')
-            ax1.set_ylim(0,2)
+            ax1.set_ylim(1,3)
 
+            # contour plot of mach number
             con = ax2.contourf(xc[1:,1:],yc[1:,1:],mach[1:,1:], \
                     10,cmap=plt.cm.rainbow)
             #plt.clabel(con, fontsize=12,colors='k')
             ax2.set_xlim(-1,2)
             ax2.set_ylim(0,1)
+
+            # residual plot
+            line4, = ax3.plot(range(0, len(reslist)), reslist)
+            ax3.set_yscale('log')
+            ax3.set_xlim(0,100)
+            ax3.set_ylim(10**(int(np.log10(np.amin(reslist)))-1), \
+                         10**(int(np.log10(np.amax(reslist)))+1))
             fig.show()
         else:
             j = int(mach.shape[-1]/2)
@@ -515,15 +523,22 @@ def monitor():
             line2.set_ydata(mach[1:,j])
             j = -1
             line3.set_ydata(mach[1:,j])
+
             ax2.cla()
             con = ax2.contourf(xc[1:,1:],yc[1:,1:],mach[1:,1:], \
                     10,cmap=plt.cm.rainbow)
             #plt.clabel(con, fontsize=12,colors='k')
             ax2.set_xlim(-1,2)
             ax2.set_ylim(0,1)
+
+            line4.set_xdata(range(0, len(reslist)))
+            line4.set_ydata(reslist)
+            ax3.set_xlim(0, (t/100+1)*100)
+            ax3.set_ylim(10**(int(np.log10(np.amin(reslist)))-1), \
+                         10**(int(np.log10(np.amax(reslist)))+1))
             fig.canvas.draw()
 
-    if (resmax < 1e-6): stop = True
+    if (resmax < eps): stop = True
     return
 
 # -----------------------------------------------------------------------------
@@ -619,25 +634,26 @@ def write_data():
 # main program
 
 # grid points
-# mx = 65; my = 17 
-mx = 129; my = 33
+mx = 65; my = 17 
+# mx = 129; my = 33
 
 # parameters
 lmax = 4
 gamma = 1.4
 alpha = 1       # axisymmetric flow
+plot_interval = 1
 
 cfl  = 1.5
 visc = 3
 eps  = 1e-6
-tmax = 10000
+tmax = 20000
 
 # boundary conditions
-ibcin  = 1
-ibcout = 1
+ibcin  = 2
+ibcout = 2
 
 # read mesh file
-filename = 'ft03.128x32_trans.dat'
+filename = 'ft03.dat'
 (x, y) = read_mesh(filename)
 # plot_mesh()
 
@@ -647,10 +663,12 @@ area = calc_area()
 # intial condtions
 q = ic()
 
-fig = plt.figure()
-ax1 = fig.add_subplot(211)
-ax2 = fig.add_subplot(212, aspect='equal')
+fig = plt.figure(figsize=(6,9))
+ax1 = fig.add_subplot(311)
+ax2 = fig.add_subplot(312, aspect='equal')
+ax3 = fig.add_subplot(313)
 
+reslist = []
 for t in range(0,tmax):
     stop = False
     rk4()
